@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Galaxy</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=Public+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --void: #05050a;
+  --ui-border: rgba(255,255,255,0.1);
+  --text-dim: rgba(255,255,255,0.3);
+  --text-mid: rgba(255,255,255,0.55);
+  --text-bright: rgba(255,255,255,0.9);
+}
+
+html, body { width:100%; height:100%; overflow:hidden; background:var(--void); color:var(--text-bright); font-family:'Public Sans',sans-serif; }
+canvas { position:fixed; inset:0; }
+
+/* CURSOR */
+body.placing { cursor:none; }
+#place-cursor { position:fixed; pointer-events:none; z-index:200; transform:translate(-50%,-50%); display:none; }
+body.placing #place-cursor { display:block; }
+
+/* INTRO */
+#intro {
+  position:fixed; inset:0; z-index:100;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:var(--void); transition:opacity 1.2s ease; pointer-events:none;
+}
+#intro.fade-out { opacity:0; }
+#intro.gone { display:none; }
+#intro-text {
+  font-family:'Playfair Display',serif; font-size:clamp(15px,2vw,20px);
+  font-style:italic; font-weight:400; color:rgba(255,255,255,0.5);
+  letter-spacing:0.04em; text-align:center; line-height:2;
+  max-width:480px; opacity:0; transition:opacity 1.4s ease;
+}
+#intro-text.visible { opacity:1; }
+
+/* TOPBAR */
+#topbar {
+  position:fixed; top:0; left:0; right:0; height:52px;
+  display:flex; align-items:center; padding:0 28px;
+  justify-content:space-between; z-index:50;
+  border-bottom:1px solid var(--ui-border);
+  background:linear-gradient(to bottom,rgba(5,5,10,0.95),rgba(5,5,10,0));
+  backdrop-filter:blur(4px);
+  opacity:0; transition:opacity 0.8s;
+}
+#topbar.visible { opacity:1; }
+#topbar-left { display:flex; align-items:baseline; gap:16px; }
+h1 { font-family:'Playfair Display',serif; font-weight:400; font-style:italic; font-size:17px; letter-spacing:0.02em; }
+#star-count-label { font-size:11px; font-weight:300; color:var(--text-dim); }
+#topbar-right { display:flex; gap:10px; align-items:center; }
+
+.btn {
+  font-family:'Public Sans',sans-serif; font-size:10px; font-weight:500; letter-spacing:0.08em;
+  text-transform:uppercase; padding:7px 16px;
+  background:transparent; border:1px solid var(--ui-border);
+  color:var(--text-mid); cursor:pointer; transition:all 0.2s; white-space:nowrap;
+}
+.btn:hover { border-color:rgba(255,255,255,0.35); color:var(--text-bright); }
+.btn.active { border-color:rgba(255,255,255,0.5); color:var(--text-bright); background:rgba(255,255,255,0.05); }
+
+/* PLACEHOLDER BANNER */
+#placeholder-banner {
+  position:fixed; top:60px; left:50%; transform:translateX(-50%);
+  background:rgba(5,5,10,0.88); border:1px solid rgba(255,255,255,0.14);
+  backdrop-filter:blur(12px); padding:10px 20px;
+  display:flex; align-items:center; gap:14px;
+  z-index:50; opacity:0; transition:opacity 0.5s;
+}
+#placeholder-banner.visible { opacity:1; }
+#placeholder-banner p { font-size:11px; font-weight:300; color:var(--text-dim); }
+#placeholder-banner button {
+  font-family:'Public Sans',sans-serif; font-size:10px; font-weight:500; letter-spacing:0.08em;
+  text-transform:uppercase; padding:5px 12px;
+  background:transparent; border:1px solid var(--ui-border);
+  color:var(--text-mid); cursor:pointer; transition:all 0.2s; white-space:nowrap;
+}
+#placeholder-banner button:hover { border-color:rgba(255,255,255,0.3); color:var(--text-bright); }
+
+/* TIMELINE */
+#timeline {
+  position:fixed; bottom:0; left:0; right:0;
+  padding:18px 44px 24px;
+  background:linear-gradient(to top,rgba(5,5,10,0.9),rgba(5,5,10,0));
+  z-index:50; opacity:0; transition:opacity 0.5s; pointer-events:none;
+}
+#timeline.visible { opacity:1; pointer-events:all; }
+#timeline-inner { display:flex; align-items:center; gap:16px; }
+#year-label-left, #year-label-right {
+  font-size:11px; font-weight:300; color:var(--text-dim);
+  text-transform:uppercase; white-space:nowrap; min-width:40px;
+}
+#year-label-right { text-align:right; }
+#scrubber-track { flex:1; height:1px; background:var(--ui-border); position:relative; cursor:pointer; }
+#scrubber-fill { position:absolute; left:0; top:0; bottom:0; background:rgba(255,255,255,0.22); transition:width 0.05s; }
+#scrubber-thumb {
+  position:absolute; top:50%; transform:translate(-50%,-50%);
+  width:10px; height:10px; border-radius:50%;
+  background:rgba(255,255,255,0.75); box-shadow:0 0 8px rgba(255,255,255,0.35);
+  cursor:grab; transition:left 0.05s;
+}
+#scrubber-thumb:active { cursor:grabbing; }
+#timeline-year-display { font-size:13px; font-weight:400; color:var(--text-mid); min-width:44px; text-align:center; }
+
+/* SIDEBAR */
+#sidebar {
+  position:fixed; top:52px; right:0; bottom:0; width:300px;
+  background:rgba(5,5,10,0.97); border-left:1px solid var(--ui-border);
+  backdrop-filter:blur(20px); z-index:40;
+  padding:32px 28px 28px; display:flex; flex-direction:column;
+  transform:translateX(100%); transition:transform 0.35s cubic-bezier(0.16,1,0.3,1);
+  overflow-y:auto;
+}
+#sidebar.open { transform:translateX(0); }
+#sidebar h2 { font-size:16px; font-weight:500; margin-bottom:4px; }
+.sub { font-size:11px; font-weight:300; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); margin-bottom:30px; }
+
+.field { margin-bottom:20px; }
+.field label { display:block; font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
+.field input, .field textarea {
+  width:100%; background:transparent; border:none;
+  border-bottom:1px solid var(--ui-border); color:var(--text-bright);
+  font-family:'Public Sans',sans-serif; font-size:14px; font-weight:400;
+  padding:6px 0 8px; outline:none; resize:none;
+  transition:border-color 0.2s; caret-color:rgba(255,255,255,0.8);
+}
+.field input:focus, .field textarea:focus { border-bottom-color:rgba(255,255,255,0.35); }
+.field input::placeholder, .field textarea::placeholder { color:var(--text-dim); }
+.field .hint { font-size:11px; font-weight:300; color:var(--text-dim); margin-top:6px; line-height:1.7; }
+
+.toggle-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--ui-border); margin-bottom:20px; }
+.toggle-label { font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); }
+.toggle-label span { display:block; font-size:11px; font-weight:300; color:rgba(255,255,255,0.4); margin-top:3px; letter-spacing:0; text-transform:none; }
+.toggle { width:36px; height:18px; background:rgba(255,255,255,0.08); border:1px solid var(--ui-border); border-radius:9px; position:relative; cursor:pointer; transition:all 0.25s; flex-shrink:0; }
+.toggle.on { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.35); }
+.toggle::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:rgba(255,255,255,0.4); transition:all 0.25s; }
+.toggle.on::after { left:20px; background:rgba(255,255,255,0.9); box-shadow:0 0 6px rgba(255,255,255,0.4); }
+
+hr.divider { border:none; border-top:1px solid var(--ui-border); margin:8px 0 20px; }
+.sidebar-note { font-size:12px; font-weight:300; color:var(--text-dim); line-height:1.8; margin-bottom:20px; }
+.sidebar-note span { color:var(--text-mid); font-weight:400; }
+
+.btn-place {
+  font-family:'Public Sans',sans-serif; font-size:11px; font-weight:500; letter-spacing:0.08em;
+  text-transform:uppercase; padding:12px;
+  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.2);
+  color:var(--text-bright); cursor:pointer; width:100%; transition:all 0.2s; margin-top:auto;
+}
+.btn-place:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.4); }
+
+/* DETAIL */
+#detail {
+  position:fixed; bottom:80px; left:28px; width:288px;
+  background:rgba(5,5,10,0.96); border:1px solid rgba(255,255,255,0.1);
+  backdrop-filter:blur(24px); padding:24px 22px 20px; z-index:40;
+  opacity:0; transform:translateY(6px); transition:opacity 0.25s, transform 0.25s; pointer-events:none;
+}
+#detail.visible { opacity:1; transform:translateY(0); pointer-events:all; }
+#detail-header { display:flex; flex-direction:column; margin-bottom:10px; }
+#detail-name { font-size:14px; font-weight:500; line-height:1.3; color:rgba(255,255,255,0.95); margin-bottom:3px; }
+#detail-year-badge { font-size:11px; font-weight:300; color:rgba(255,255,255,0.38); white-space:nowrap; border:none; padding:0; margin:0; }
+#detail-placeholder-note { font-size:12px; font-weight:300; color:rgba(255,255,255,0.95); margin-bottom:10px; border-left:2px solid rgba(255,255,255,0.15); padding-left:10px; display:none; }
+#detail-placeholder-note.show { display:block; }
+#detail-transformative-badge { display:none; font-size:10px; font-weight:500; letter-spacing:0.08em; color:rgba(255,255,255,0.95); border:1px solid rgba(255,255,255,0.25); padding:3px 8px; margin-bottom:12px; width:fit-content; text-transform:uppercase; }
+#detail-transformative-badge.show { display:block; }
+#detail-desc { font-size:12px; font-weight:300; line-height:1.9; color:rgba(255,255,255,0.95); margin-bottom:14px; min-height:1px; }
+#detail-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+.dtag { font-size:10px; font-weight:400; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.95); border:1px solid rgba(255,255,255,0.2); padding:3px 9px; }
+#detail-connections { display:none; }
+
+/* Collapsible connected-projects section for influence stars */
+#detail-connected-section { margin-bottom: 14px; }
+#detail-connected-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; background: none; border: none; border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 9px 0 9px; cursor: pointer; color: rgba(255,255,255,0.38);
+  font-family: 'Public Sans', sans-serif; font-size: 10px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  transition: color 0.2s;
+}
+#detail-connected-toggle:hover { color: rgba(255,255,255,0.65); }
+#detail-connected-toggle .toggle-arrow {
+  font-size: 9px; transition: transform 0.22s ease; display: inline-block;
+}
+#detail-connected-toggle.expanded { color: rgba(255,255,255,0.6); }
+#detail-connected-toggle.expanded .toggle-arrow { transform: rotate(90deg); }
+#detail-connected-body {
+  display: none; padding-bottom: 4px;
+}
+#detail-connected-body.open { display: block; }
+#detail-connected-body .dtag {
+  display: inline-block; margin: 0 4px 5px 0;
+}
+#detail-footer { display:flex; align-items:center; justify-content:space-between; }
+#detail-edit-btn { font-family:'Public Sans',sans-serif; font-size:10px; font-weight:500; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.95); background:none; border:1px solid rgba(255,255,255,0.2); padding:4px 12px; cursor:pointer; transition:all 0.2s; }
+#detail-edit-btn:hover { background:rgba(255,255,255,0.08); }
+#detail-mark-btn { font-family:'Public Sans',sans-serif; font-size:10px; font-weight:500; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.95); background:none; border:1px solid rgba(255,255,255,0.2); padding:4px 10px; cursor:pointer; transition:all 0.2s; }
+#detail-mark-btn:hover { background:rgba(255,255,255,0.08); }
+#detail-mark-btn.marked { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.4); color:rgba(255,255,255,1); }
+#detail-close { background:none; border:none; font-family:'Public Sans',sans-serif; font-size:10px; font-weight:400; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.95); cursor:pointer; padding:0; }
+#detail-close:hover { opacity:0.6; }
+
+/* TAG STRIP */
+#tag-strip { position:fixed; bottom:72px; left:50%; transform:translateX(-50%); display:flex; gap:6px; flex-wrap:wrap; justify-content:center; z-index:40; max-width:65vw; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+#tag-strip.visible { opacity:1; pointer-events:all; }
+.tag-pill { font-family:'Public Sans',sans-serif; font-size:10px; font-weight:400; letter-spacing:0.06em; text-transform:uppercase; padding:5px 12px; background:transparent; border:1px solid var(--ui-border); color:var(--text-dim); cursor:pointer; transition:all 0.18s; }
+.tag-pill:hover { border-color:rgba(255,255,255,0.3); color:var(--text-mid); }
+.tag-pill.on { background:rgba(255,255,255,0.07); border-color:rgba(255,255,255,0.4); color:var(--text-bright); }
+
+/* PLACING HINT */
+#placing-hint { position:fixed; top:72px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:400; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); pointer-events:none; z-index:50; opacity:0; transition:opacity 0.3s; white-space:nowrap; }
+#placing-hint.visible { opacity:1; }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<svg id="place-cursor" width="28" height="28" viewBox="0 0 28 28">
+  <circle cx="14" cy="14" r="1.8" fill="rgba(255,255,255,0.85)"/>
+  <line x1="14" y1="2" x2="14" y2="9" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+  <line x1="14" y1="19" x2="14" y2="26" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+  <line x1="2" y1="14" x2="9" y2="14" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+  <line x1="19" y1="14" x2="26" y2="14" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+</svg>
+
+<div id="intro"><div id="intro-text"></div></div>
+
+<div id="topbar">
+  <div id="topbar-left">
+    <h1>Design Galaxy</h1>
+    <span id="star-count-label"></span>
+  </div>
+  <div id="topbar-right">
+    <button class="btn" id="btn-export" title="Download your galaxy data as a backup">Export data</button>
+    <button class="btn" id="btn-import" title="Load a previously exported backup">Import data</button>
+    <button class="btn" id="btn-constellations">Show constellations</button>
+    <button class="btn" id="btn-influences">Show influences</button>
+    <button class="btn" id="btn-add-influence" style="display:none">+ Add influence</button>
+    <button class="btn" id="btn-add">+ Chart experience</button>
+  </div>
+</div>
+
+<input type="file" id="import-input" accept=".json" style="display:none">
+<div id="placeholder-banner" style="display:none"></div>
+
+<div id="timeline">
+  <div id="timeline-inner">
+    <span id="year-label-left">—</span>
+    <div id="scrubber-track">
+      <div id="scrubber-fill"></div>
+      <div id="scrubber-thumb"></div>
+    </div>
+    <span id="year-label-right">—</span>
+    <span id="timeline-year-display">—</span>
+  </div>
+</div>
+
+<div id="sidebar">
+  <h2>New experience</h2>
+  <p class="sub">Name it · reflect · tag it</p>
+  <div class="field">
+    <label>Experience</label>
+    <input type="text" id="f-name" placeholder="What was it?">
+  </div>
+  <div class="field">
+    <label>Year</label>
+    <input type="number" id="f-year" placeholder="e.g. 2021" min="1980" max="2099">
+  </div>
+  <div class="field">
+    <label>Reflection</label>
+    <textarea id="f-desc" rows="3" placeholder="What did you learn or create?"></textarea>
+  </div>
+  <div class="field">
+    <label>Keywords</label>
+    <input type="text" id="f-tags" placeholder="accessibility, motion, systems…">
+    <p class="hint">Comma-separated. Shared keywords auto-form constellations.</p>
+  </div>
+  <div class="toggle-row">
+    <div class="toggle-label">Transformative<span>Changed how everything connects</span></div>
+    <div class="toggle" id="f-transformative-toggle"></div>
+  </div>
+  <hr class="divider">
+  <p class="sidebar-note">Click <span>Place star</span> then click anywhere in the galaxy to set it down. Press Esc to cancel.</p>
+  <button class="btn-place" id="btn-place">Place star →</button>
+</div>
+
+<div id="placing-hint">Click anywhere in the galaxy to place your star — Esc to cancel</div>
+<div id="placing-hint-influence" style="position:fixed;top:72px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:400;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.3);pointer-events:none;z-index:50;opacity:0;transition:opacity 0.3s;white-space:nowrap">Click anywhere in the galaxy to place this influence — Esc to cancel</div>
+
+<!-- INFLUENCE SIDEBAR -->
+<div id="influence-sidebar" style="position:fixed;top:52px;right:0;bottom:0;width:300px;background:rgba(5,5,10,0.97);border-left:1px solid rgba(255,255,255,0.1);backdrop-filter:blur(20px);z-index:40;padding:32px 28px 28px;display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.35s cubic-bezier(0.16,1,0.3,1);overflow-y:auto">
+  <h2 style="font-family:'Playfair Display',serif;font-size:16px;font-weight:400;font-style:italic;margin-bottom:4px">New influence</h2>
+  <p class="sub">Designer, theorist, or thinker</p>
+  <div class="field">
+    <label>Name</label>
+    <input type="text" id="inf-name" placeholder="e.g. Victor Papanek">
+  </div>
+  <div class="field">
+    <label>About</label>
+    <textarea id="inf-desc" rows="3" placeholder="Why are they relevant to your practice?"></textarea>
+  </div>
+  <div class="field">
+    <label>Keywords</label>
+    <input type="text" id="inf-tags" placeholder="feasibility, systems, culture…">
+    <p class="hint">Shared keywords connect this influence to your project stars.</p>
+  </div>
+  <hr class="divider">
+  <p class="sidebar-note">Click <span>Place influence</span> then click anywhere in the galaxy.</p>
+  <button class="btn-place" id="inf-place">Place influence →</button>
+</div>
+
+<div id="detail">
+  <!-- VIEW MODE -->
+  <div id="detail-view">
+    <div id="detail-header">
+      <div id="detail-name"></div>
+      <div id="detail-year-badge"></div>
+    </div>
+    <div id="detail-transformative-badge">✦ transformative</div>
+    <div id="detail-desc"></div>
+    <div id="detail-tags"></div>
+    <!-- Collapsible connected projects — shown for influence stars only -->
+    <div id="detail-connected-section" style="display:none">
+      <button id="detail-connected-toggle" aria-expanded="false">
+        <span id="detail-connected-label">Connected projects</span>
+        <span class="toggle-arrow">›</span>
+      </button>
+      <div id="detail-connected-body"></div>
+    </div>
+    <div id="detail-footer">
+      <button id="detail-edit-btn">Edit</button>
+      <button id="detail-remove-btn" style="display:none;opacity:0.45;font-family:'Public Sans',sans-serif;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;background:none;border:none;color:#fff;cursor:pointer;padding:0" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='0.45'">Remove</button>
+      <button id="detail-close">✕ close</button>
+    </div>
+  </div>
+  <!-- EDIT MODE -->
+  <div id="detail-edit" style="display:none">
+    <div class="field">
+      <label id="e-label-name">Experience</label>
+      <input type="text" id="e-name">
+    </div>
+    <div class="field" id="e-field-year">
+      <label>Year</label>
+      <input type="number" id="e-year" min="1980" max="2099">
+    </div>
+    <div class="field">
+      <label id="e-label-desc">Reflection</label>
+      <textarea id="e-desc" rows="3"></textarea>
+    </div>
+    <div class="field">
+      <label id="e-label-tags">Keywords</label>
+      <input type="text" id="e-tags">
+      <p class="hint" id="e-hint-tags">Comma-separated.</p>
+    </div>
+    <div class="toggle-row" id="e-field-transformative">
+      <div class="toggle-label">Transformative<span>Changed how everything connects</span></div>
+      <div class="toggle" id="e-transformative-toggle"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn-place" id="e-save" style="flex:1;padding:9px">Save</button>
+      <button class="btn" id="e-cancel" style="padding:9px 14px">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="tag-strip"></div>
+
+<script>
+// ─── PLACEHOLDER DATA ────────────────────────────────────────────────────
+// Spread across the canvas in a loose organic cluster
+// x/y are world coordinates (canvas space, centred around 0)
+const PLACEHOLDER_STARS = [
+  { name:'Redesigning a design program',              year:null, x:-320, y:-180, tags:[], transformative:false, desc:'' },
+  { name:'A TV show about food waste',                year:null, x:-120, y:-300, tags:[], transformative:false, desc:'' },
+  { name:'Hail risk for Suncorp',                     year:null, x: 180, y:-260, tags:[], transformative:false, desc:'' },
+  { name:'Translation app for international students',year:null, x:-260, y:  80, tags:[], transformative:false, desc:'' },
+  { name:'Business design in China',                  year:null, x:  60, y: -80, tags:[], transformative:true,  desc:'' },
+  { name:'A room divider for public space',           year:null, x:-440, y: 160, tags:[], transformative:false, desc:'' },
+  { name:'An experience to save the Gilbert\'s potoroo', year:null, x:-200, y: 280, tags:[], transformative:false, desc:'' },
+  { name:'Turning kudzu into teabags',                year:null, x:  20, y: 220, tags:[], transformative:false, desc:'' },
+  { name:'Collaborative travel planning app',         year:null, x: 300, y:  60, tags:[], transformative:false, desc:'' },
+  { name:'A game to teach daily English',             year:null, x: 200, y: 180, tags:[], transformative:false, desc:'' },
+  { name:'Magazine design',                           year:null, x: 380, y:-160, tags:[], transformative:false, desc:'' },
+  { name:'Branding a design exhibition',              year:null, x: 480, y: -40, tags:[], transformative:false, desc:'' },
+  { name:'Packaging for Dandelion Clock',             year:null, x: 420, y: 120, tags:[], transformative:false, desc:'' },
+  { name:'Wayfinding for Eastwood',                   year:null, x: 100, y:-420, tags:[], transformative:false, desc:'' },
+  { name:'The history of a Chinese teapot',           year:null, x:-100, y: 420, tags:[], transformative:false, desc:'' },
+  { name:'The branding of the Olympics',              year:null, x: 260, y: 340, tags:[], transformative:false, desc:'' },
+];
+
+// ─── PRACTITIONER / INFLUENCE DATA ──────────────────────────────────────
+let PRACTITIONERS = [
+  {
+    id: 'p-papanek', name: 'Victor Papanek', year: null,
+    desc: 'Argued in Design for the Real World (1971) that design divorced from real-world feasibility and genuine impact is irresponsible. The most direct historical precedent for questioning whether a well-conceived idea actually constitutes good design if it cannot function or prove its worth in reality (Papanek, 1971).',
+    tags: ['real-world', 'sustainability', 'strategy'],
+    x: -480, y: 80,
+  },
+  {
+    id: 'p-aicher', name: 'Otl Aicher', year: null,
+    desc: 'Designed the 1972 Munich Olympics visual identity with the explicit intent of communicating a cultural and political message through form. Believed design is never neutral — every visual decision carries ideology and meaning, whether deliberate or not. Foundational to the idea that visual communication must be purposeful and considered.',
+    tags: ['branding', 'culture', 'graphics'],
+    x: 560, y: -200,
+  },
+  {
+    id: 'p-tschichold', name: 'Jan Tschichold', year: null,
+    desc: 'Argued that typography is not decoration but the primary carrier of meaning — every spacing decision, every weight choice either serves the message or undermines it. His later shift from rigid modernist rules toward humanist flexibility also reflects a belief that design thinking should respond to context rather than follow doctrine.',
+    tags: ['branding', 'graphics', 'culture'],
+    x: 580, y: 60,
+  },
+  {
+    id: 'p-hara', name: 'Kenya Hara', year: null,
+    desc: 'Art director of Muji and design theorist whose concept of emptiness argues that design should create space for meaning rather than impose it. Deeply invested in how cultural context — specifically Japanese — shapes what design communicates and how it is received. Research and cultural understanding are the foundation of his practice, not decoration.',
+    tags: ['culture', 'branding', 'graphics'],
+    x: 360, y: -380,
+  },
+  {
+    id: 'p-eames', name: 'Charles & Ray Eames', year: null,
+    desc: 'Believed design could only be done well through deep research into how people actually live — not assumed, but observed. Treated constraints as the conditions that produced good design rather than obstacles to it. Their methodology, not their aesthetic, is the relevant reference: that concrete problems and real limitations are generative rather than restrictive.',
+    tags: ['real-world', 'strategy', 'interaction'],
+    x: -60, y: -500,
+  },
+  {
+    id: 'p-lava', name: 'Studio Lava Beijing', year: null,
+    desc: 'Beijing-based studio whose practice is grounded in cultural specificity — combining Western and Eastern visual symbols to create work that communicates across contexts (Howarth, 2014). Their approach to design is one of deliberate simplicity: sticking to one idea at a time and condensing work to its most legible form so that meaning is never obscured by layering (Hingley, 2022). Design is only successful when the viewer completes the idea — if the message does not land, the work starts over (Hingley, 2022). Directly relevant to observations made during exchange about how visual language and design intent operate differently across cultural contexts.',
+    tags: ['culture', 'branding', 'graphics'],
+    x: 200, y: -420,
+  },
+  {
+    id: 'p-sulki', name: 'Sulki and Min', year: null,
+    desc: 'Seoul-based graphic design duo who argue that creative freedom is overrated. Guided by the Sol LeWitt outlook that beauty is incidental rather than intended, their position on constraints is direct: "total creative freedom is often neither free, nor total, nor creative. We believe in constraints. We also believe it\'s possible to work with irrational restrictions such as the client\'s favourite colours" (Ong, 2018). Connects to a preference for working within defined briefs and concrete parameters over open hypothetical contexts.',
+    tags: ['branding', 'graphics', 'culture'],
+    x: 480, y: 280,
+  },
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────
+let stars = [];
+let nextId = 1;
+let t = 0;
+
+let ox = 0, oy = 0, scale = 1;
+let panning = false, panStart = null, panView = null;
+
+let pendingStar = null, placing = false;
+let showConstellations = false;
+let showInfluences = false;
+let activeTags = new Set();
+let hoveredStar = null, selectedStar = null;
+let mouseX = 0, mouseY = 0;
+let isTransformative = false;
+
+let scrubYear = null;
+let introComplete = false;
+let bloomIndex = 0;
+let hasPlaceholders = true;
+
+// dragging stars
+let draggingStar = null;
+let dragOffsetX = 0, dragOffsetY = 0;
+let dragMoved = false;
+
+// ─── CONSTELLATION NAMES ─────────────────────────────────────────────────
+const CONSTELLATION_NAMES = {
+  'graphics':     'Integrated practice, where two disciplines meet',
+  'interaction':  'Integrated practice, where two disciplines meet',
+  'culture':      'Culture and context as foundations',
+  'branding':     'Visual communication with intent',
+  'sustainability':'Design\'s responsibility to the real world',
+  'real-world':   'Feasible solutions for real problems',
+  'strategy':     'When does a good idea become a good design?',
+};
+
+// Compute centroid of all stars sharing a tag
+function constellationCentroid(tag) {
+  const members = stars.filter(s => isStarVisible(s) && s.tags.includes(tag));
+  if (members.length < 2) return null;
+  const cx = members.reduce((sum, s) => sum + s.x, 0) / members.length;
+  const cy = members.reduce((sum, s) => sum + s.y, 0) / members.length;
+  return { cx, cy, members };
+}
+
+// Deduplicate constellation labels (graphics+interaction share a name)
+function uniqueConstellations() {
+  const seen = new Set();
+  const out = [];
+  for (const [tag, name] of Object.entries(CONSTELLATION_NAMES)) {
+    if (seen.has(name)) continue;
+    // for shared names, merge the member stars of all tags with that name
+    const siblingTags = Object.entries(CONSTELLATION_NAMES)
+      .filter(([, n]) => n === name).map(([t]) => t);
+    const members = stars.filter(s =>
+      isStarVisible(s) && s.tags.some(t => siblingTags.includes(t))
+    );
+    if (members.length < 2) { seen.add(name); continue; }
+    const cx = members.reduce((sum, s) => sum + s.x, 0) / members.length;
+    const cy = members.reduce((sum, s) => sum + s.y, 0) / members.length;
+    out.push({ name, cx, cy, members });
+    seen.add(name);
+  }
+  return out;
+}
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  if (stars.length) fitGalaxy();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Generate organic blob points for a star (8–11 vertices, irregular radii)
+function makeBlobPts(seed) {
+  const n = 8 + Math.floor(seed * 3.99); // 8–11 points
+  const pts = [];
+  const baseAngle = seed * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    // slightly irregular angular spacing
+    const spread = (Math.PI * 2 / n);
+    const jitter = (((seed * 73.1 + i * 17.3) % 1) - 0.5) * spread * 0.35;
+    const angle = baseAngle + i * spread + jitter;
+    // radius factor 0.62–1.38, seeded per point
+    const rf = 0.62 + (((seed * 31.7 + i * 11.9) % 1)) * 0.76;
+    pts.push({ angle, rf });
+  }
+  return pts;
+}
+
+// ─── SEED PLACEHOLDERS ───────────────────────────────────────────────────
+function seedPlaceholders() {
+  stars = PLACEHOLDER_STARS.map((p, i) => {
+    const sizeSeed = [0.4,1.1,0.7,0.9,0.3,1.4,0.6,0.8,1.0,0.5,1.2,0.7,0.9,0.4,1.1,0.6][i] || 0.7;
+    const blobSeed = (sizeSeed * 0.618 + i * 0.137) % 1;
+    return {
+      ...p,
+      id: nextId++,
+      _sizeSeed: sizeSeed,
+      _phase: i * 0.71,
+      _phase2: i * 1.37 + 0.5,
+      _placeholder: false,
+      _blobPts: makeBlobPts(blobSeed),
+    };
+  });
+  fitGalaxy();
+}
+
+// ─── FIT GALAXY TO VIEWPORT ──────────────────────────────────────────────
+// Computes scale + offset so all stars are visible with padding
+function fitGalaxy(padding) {
+  if (!stars.length) { ox = W / 2; oy = H / 2; scale = 1; return; }
+  padding = padding ?? 0.13; // fraction of viewport
+
+  const xs = stars.map(s => s.x);
+  const ys = stars.map(s => s.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+  const galW = maxX - minX || 1;
+  const galH = maxY - minY || 1;
+
+  const padPx = Math.min(W, H) * padding;
+  const fitScale = Math.min(
+    (W - padPx * 2) / galW,
+    (H - padPx * 2) / galH
+  );
+
+  // never zoom in beyond 1× — only zoom out to fit
+  scale = Math.min(fitScale, 1);
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  ox = W / 2 - cx * scale;
+  oy = H / 2 - cy * scale;
+}
+
+// ─── BG STARS ────────────────────────────────────────────────────────────
+const bgStars = Array.from({length:400}, () => ({
+  x: Math.random(), y: Math.random(),
+  r: Math.pow(Math.random(), 2.6) * 1.4 + 0.1,
+  a: Math.random() * 0.36 + 0.04,
+  phase: Math.random() * Math.PI * 2,
+  speed: Math.random() * 0.005 + 0.0015,
+  layer: Math.random(),
+}));
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────
+function toScreen(wx, wy) { return [wx * scale + ox, wy * scale + oy]; }
+function toWorld(sx, sy)  { return [(sx - ox) / scale, (sy - oy) / scale]; }
+
+function starRadius(s) {
+  const base = s.transformative ? 2.6 : 1.4;
+  return base + s.tags.length * 0.22 + s._sizeSeed * 0.55;
+}
+
+function hitStar(sx, sy) {
+  // check practitioners first (they're on top visually)
+  if (showInfluences) {
+    for (const p of PRACTITIONERS) {
+      const [px, py] = toScreen(p.x, p.y);
+      const r = 3.5 * scale * 1.6 + 14;
+      if ((sx-px)**2 + (sy-py)**2 < r*r) return p;
+    }
+  }
+  for (let i = stars.length - 1; i >= 0; i--) {
+    const s = stars[i];
+    if (!isStarVisible(s)) continue;
+    const [px, py] = toScreen(s.x, s.y);
+    const r = starRadius(s) * scale + 14;
+    if ((sx-px)**2 + (sy-py)**2 < r*r) return s;
+  }
+  return null;
+}
+
+function isStarVisible(s) {
+  if (scrubYear === null) return true;
+  return s.year !== null && s.year <= scrubYear;
+}
+
+function getSharedTags(star) {
+  const out = {};
+  for (const s of stars) {
+    if (s.id === star.id || !isStarVisible(s)) continue;
+    const shared = star.tags.filter(t => s.tags.includes(t));
+    if (shared.length) out[s.id] = shared;
+  }
+  return out;
+}
+
+function allConnections() {
+  const pairs = [];
+  for (let i = 0; i < stars.length; i++) {
+    if (!isStarVisible(stars[i])) continue;
+    for (let j = i+1; j < stars.length; j++) {
+      if (!isStarVisible(stars[j])) continue;
+      const shared = stars[i].tags.filter(t => stars[j].tags.includes(t));
+      if (shared.length) pairs.push({ a:stars[i], b:stars[j], shared });
+    }
+  }
+  return pairs;
+}
+
+function allTagsList() {
+  const s = new Set();
+  stars.forEach(st => st.tags.forEach(t => s.add(t)));
+  return [...s].sort();
+}
+
+function yearRange() {
+  const ys = stars.map(s => s.year).filter(y => y !== null);
+  if (!ys.length) return null;
+  return { min: Math.min(...ys), max: Math.max(...ys) };
+}
+
+function bloomProgress(s) {
+  if (!introComplete) {
+    const idx = stars.indexOf(s);
+    return Math.min(1, Math.max(0, (bloomIndex - idx * 12) / 35));
+  }
+  return 1;
+}
+
+// ─── ORGANIC BLOB PATH ────────────────────────────────────────────────────
+// Draws an irregular star-like blob using the star's noise seeds
+function blobPath(ctx, px, py, r, s, pulse) {
+  const pts = s._blobPts;   // array of {angle, radiusFactor}
+  const n = pts.length;
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const p = pts[i % n];
+    const bx = px + Math.cos(p.angle) * r * p.rf * pulse;
+    const by = py + Math.sin(p.angle) * r * p.rf * pulse;
+    if (i === 0) ctx.moveTo(bx, by);
+    else ctx.lineTo(bx, by);
+  }
+  ctx.closePath();
+}
+
+// ─── DRAW ─────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#05050a';
+  ctx.fillRect(0, 0, W, H);
+
+  // subtle nebula washes — muted to work on #05050a
+  [[W*.38, H*.52, W*.62, 'rgba(30,24,55,0.55)', 'rgba(5,5,10,0)'],
+   [W*.75, H*.28, W*.4,  'rgba(20,26,50,0.38)', 'rgba(5,5,10,0)'],
+   [W*.58, H*.76, W*.3,  'rgba(14,20,42,0.3)',  'rgba(5,5,10,0)']
+  ].forEach(([cx,cy,cr,c0,c1]) => {
+    const n = ctx.createRadialGradient(cx,cy,0,cx,cy,cr);
+    n.addColorStop(0,c0); n.addColorStop(1,c1);
+    ctx.fillStyle = n; ctx.fillRect(0,0,W,H);
+  });
+
+  // bg micro-stars with parallax
+  bgStars.forEach(s => {
+    const a = s.a * (0.7 + 0.3 * Math.sin(t * s.speed + s.phase));
+    const px = ((s.x * W + ox * (1 - s.layer) * 0.06) % W + W) % W;
+    const py = ((s.y * H + oy * (1 - s.layer) * 0.06) % H + H) % H;
+    ctx.beginPath(); ctx.arc(px, py, s.r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fill();
+  });
+
+  // constellation lines
+  if (showConstellations) {
+    allConnections().forEach(({ a, b, shared }) => {
+      if (activeTags.size > 0 && !shared.some(tg => activeTags.has(tg))) return;
+      const [ax,ay] = toScreen(a.x,a.y);
+      const [bx,by] = toScreen(b.x,b.y);
+      const str = Math.min(shared.length / 3, 1);
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
+      ctx.strokeStyle = `rgba(255,255,255,${0.02+str*0.04})`; ctx.lineWidth=4; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
+      ctx.strokeStyle = `rgba(255,255,255,${0.08+str*0.15})`; ctx.lineWidth=0.65; ctx.stroke();
+    });
+
+    // ── constellation name labels — only when tag is active ──
+    if (activeTags.size > 0) {
+      uniqueConstellations().forEach(({ name, cx, cy }) => {
+        // find which tags map to this name
+        const siblingTags = Object.entries(CONSTELLATION_NAMES)
+          .filter(([, n]) => n === name).map(([t]) => t);
+        // only draw if at least one of its tags is active
+        if (!siblingTags.some(t => activeTags.has(t))) return;
+
+        const [px, py] = toScreen(cx, cy);
+        const fontSize = 10;
+        ctx.font = `300 ${fontSize}px 'Public Sans',sans-serif`;
+        const metrics = ctx.measureText(name);
+        const tw = metrics.width;
+
+        ctx.fillStyle = 'rgba(5,5,10,0.45)';
+        ctx.fillRect(px - tw/2 - 8, py - fontSize - 1, tw + 16, fontSize + 6);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, px, py);
+
+        ctx.beginPath();
+        ctx.moveTo(px - tw/2, py + 3);
+        ctx.lineTo(px + tw/2, py + 3);
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      });
+    }
+  }
+
+  // ── influence connection lines ──
+  if (showInfluences) {
+    PRACTITIONERS.forEach(p => {
+      const [px, py] = toScreen(p.x, p.y);
+      stars.forEach(s => {
+        if (!isStarVisible(s)) return;
+        const shared = p.tags.filter(t => s.tags.includes(t));
+        if (!shared.length) return;
+        const [sx, sy] = toScreen(s.x, s.y);
+        const str = Math.min(shared.length / 3, 1);
+        // dashed influence line — visually distinct from constellation lines
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy);
+        ctx.strokeStyle = `rgba(255,245,238,${0.04 + str*0.08})`;
+        ctx.lineWidth = 3; ctx.setLineDash([2, 8]); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy);
+        ctx.strokeStyle = `rgba(255,245,238,${0.1 + str*0.15})`;
+        ctx.lineWidth = 0.5; ctx.setLineDash([2, 8]); ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    });
+
+    // ── practitioner four-point stars ──
+    PRACTITIONERS.forEach(p => {
+      const [px, py] = toScreen(p.x, p.y);
+      const isHov = hoveredStar?.id === p.id;
+      const isSel = selectedStar?.id === p.id;
+      const pulse = 1 + ((isHov||isSel) ? 0.15 : 0.07) * Math.sin(t * 0.035 + p.x * 0.01);
+      // slow rotation
+      const rot = t * 0.003 + p.x * 0.005;
+      const outer = (5.5 + (isSel||isHov ? 1.5 : 0)) * scale * pulse;
+      const inner = outer * 0.38;
+
+      // outer diffuse glow
+      const gr = outer * 7;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, gr);
+      g.addColorStop(0, `rgba(255,245,238,${(isHov||isSel) ? 0.2 : 0.1})`);
+      g.addColorStop(0.4, `rgba(255,245,238,${(isHov||isSel) ? 0.06 : 0.03})`);
+      g.addColorStop(1, 'rgba(255,245,238,0)');
+      ctx.beginPath(); ctx.arc(px, py, gr, 0, Math.PI*2);
+      ctx.fillStyle = g; ctx.fill();
+
+      // draw four-point star path
+      function fourPointPath() {
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const ang = rot + (i * Math.PI / 4);
+          const r = i % 2 === 0 ? outer : inner;
+          const x = px + Math.cos(ang) * r;
+          const y = py + Math.sin(ang) * r;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+      }
+
+      // soft glow fill
+      fourPointPath();
+      ctx.fillStyle = `rgba(255,245,238,${(isHov||isSel) ? 0.18 : 0.08})`;
+      ctx.fill();
+
+      // solid filled core
+      fourPointPath();
+      ctx.fillStyle = `rgba(255,245,238,${(isHov||isSel) ? 0.95 : 0.82})`;
+      ctx.fill();
+
+      // crisp edge stroke
+      fourPointPath();
+      ctx.strokeStyle = `rgba(255,255,255,${(isHov||isSel) ? 0.6 : 0.3})`;
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+
+      // long thin cross spikes
+      const spikeLen = outer * 3.2 * pulse;
+      ctx.save();
+      ctx.globalAlpha = (isHov||isSel) ? 0.35 : 0.18;
+      ctx.strokeStyle = 'rgba(255,245,238,1)';
+      ctx.lineWidth = 0.6;
+      for (let i = 0; i < 2; i++) {
+        const ang = rot + i * Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(px - Math.cos(ang)*spikeLen, py - Math.sin(ang)*spikeLen);
+        ctx.lineTo(px + Math.cos(ang)*spikeLen, py + Math.sin(ang)*spikeLen);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // label
+      const showLabel = isHov || isSel || scale > 1.5;
+      if (showLabel) {
+        const fontSize = isHov || isSel
+          ? Math.round(13 * Math.max(1, Math.min(1 / scale, 2.2)))
+          : Math.round(11 * Math.min(scale * 0.85, 1.25));
+        const labelY = py - outer * 2.2 - 6;
+        ctx.font = `${isHov || isSel ? '500' : '400'} ${fontSize}px 'Public Sans',sans-serif`;
+        const metrics = ctx.measureText(p.name);
+        if (isHov || isSel) {
+          ctx.fillStyle = 'rgba(5,5,10,0.75)';
+          ctx.fillRect(px - metrics.width/2 - 6, labelY - fontSize + 1, metrics.width + 12, fontSize + 4);
+        }
+        ctx.fillStyle = `rgba(255,245,238,${(isHov||isSel) ? 0.95 : 0.5})`;
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, px, labelY);
+      }
+    });
+  }
+
+  // user stars
+  stars.forEach(s => {
+    if (!isStarVisible(s)) return;
+    const bp = bloomProgress(s);
+    if (bp <= 0) return;
+
+    const [px,py] = toScreen(s.x, s.y);
+    const r = starRadius(s) * scale;
+    const isHov = hoveredStar?.id === s.id;
+    const isSel = selectedStar?.id === s.id;
+    const isTransf = s.transformative;
+    const isPlaceholder = s._placeholder;
+
+    let dimAlpha = 1;
+    if (activeTags.size > 0 && !s.tags.some(tg => activeTags.has(tg))) dimAlpha = 0.08;
+
+    const baseA = dimAlpha * bp;
+
+    // natural shimmer: two sine waves at different speeds per star, never in sync
+    const shimmer = 0.5
+      + 0.3  * Math.sin(t * 0.028 + s._phase)
+      + 0.2  * Math.sin(t * 0.051 + (s._phase2 ?? s._phase * 2.3));
+    // shimmer drives both size pulse and glow intensity
+    const pulseAmt = (isHov||isSel) ? 0.22 : (isTransf ? 0.18 : 0.14);
+    const pulse = 1 + pulseAmt * shimmer;
+    const glowPulse = 0.7 + 0.3 * shimmer; // 0.7–1.0, modulates glow alpha
+
+    // placeholder stars: slightly more ghostly
+    const alphaScale = isPlaceholder ? 0.7 : 1.0;
+
+    // transformative ring
+    if (isTransf && dimAlpha > 0.5 && bp > 0.5) {
+      const ringR = r * 14 * pulse;
+      const rA = (bp-0.5)*2 * 0.03 * alphaScale;
+      const rg = ctx.createRadialGradient(px,py,r*3,px,py,ringR);
+      rg.addColorStop(0,`rgba(248,248,255,${rA})`);
+      rg.addColorStop(0.5,`rgba(248,248,255,${rA*0.35})`);
+      rg.addColorStop(1,'rgba(248,248,255,0)');
+      ctx.beginPath(); ctx.arc(px,py,ringR,0,Math.PI*2); ctx.fillStyle=rg; ctx.fill();
+      ctx.beginPath(); ctx.arc(px,py,r*5*pulse,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(248,248,255,${0.07*baseA*alphaScale})`; ctx.lineWidth=0.8; ctx.stroke();
+    }
+
+    const glowCol = isTransf ? '248,248,255' : '254,254,250';
+    const coreCol = isTransf ? '#f8f8ff' : '#fefefa';
+    const gr = r * ((isHov||isSel) ? 9 : isTransf ? 7 : 5.5) * pulse;
+    const g = ctx.createRadialGradient(px,py,0,px,py,gr);
+    g.addColorStop(0,`rgba(${glowCol},${0.28*baseA*alphaScale*glowPulse})`);
+    g.addColorStop(0.35,`rgba(${glowCol},${0.07*baseA*alphaScale*glowPulse})`);
+    g.addColorStop(1,`rgba(${glowCol},0)`);
+    ctx.beginPath(); ctx.arc(px,py,gr,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+
+    // inner glow
+    const ig = ctx.createRadialGradient(px,py,0,px,py,r*2.8);
+    ig.addColorStop(0,`rgba(${glowCol},${0.75*baseA*alphaScale*glowPulse})`);
+    ig.addColorStop(1,`rgba(${glowCol},0)`);
+    ctx.beginPath(); ctx.arc(px,py,r*2.8,0,Math.PI*2); ctx.fillStyle=ig; ctx.fill();
+
+    // organic blob core
+    blobPath(ctx, px, py, r, s, pulse);
+    ctx.fillStyle=`${coreCol}`; ctx.globalAlpha = baseA * alphaScale; ctx.fill(); ctx.globalAlpha = 1;
+
+    // dashed ring for placeholders on hover
+    if (isPlaceholder && (isHov||isSel)) {
+      ctx.beginPath(); ctx.arc(px,py,r*5,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(255,255,255,0.1)`; ctx.lineWidth=0.7;
+      ctx.setLineDash([2,5]); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // drag indicator
+    if (draggingStar?.id === s.id) {
+      ctx.beginPath(); ctx.arc(px,py,r*6,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(255,255,255,0.18)`; ctx.lineWidth=0.8; ctx.stroke();
+    }
+
+    if (r > 1.8*scale && dimAlpha > 0.5) {
+      ctx.save();
+      ctx.globalAlpha = (isTransf?0.28:0.16)*baseA*alphaScale;
+      ctx.strokeStyle = isTransf ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,1)';
+      ctx.lineWidth = isTransf ? 0.7 : 0.5;
+      const sLen = r * (isTransf ? 5.5 : 3.8) * pulse;
+      const numSpikes = isTransf ? 4 : 2;
+      for (let i=0; i<numSpikes; i++) {
+        const ang = (i/numSpikes)*Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(px-Math.cos(ang)*sLen, py-Math.sin(ang)*sLen);
+        ctx.lineTo(px+Math.cos(ang)*sLen, py+Math.sin(ang)*sLen);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // bloom burst
+    if (bp < 1) {
+      ctx.beginPath(); ctx.arc(px,py,r*6*(1-bp),0,Math.PI*2);
+      ctx.strokeStyle=`rgba(${glowCol},${0.28*(1-bp)*bp*4*alphaScale})`;
+      ctx.lineWidth=1; ctx.stroke();
+    }
+
+    // label — hover only, fixed 10px
+    if ((isHov || isSel) && dimAlpha > 0.5 && bp > 0.6) {
+      const fontSize = 10;
+      const labelY = py - r * 3.8 - 6;
+      ctx.font = `500 ${fontSize}px 'Public Sans',sans-serif`;
+      const metrics = ctx.measureText(s.name);
+      ctx.fillStyle = 'rgba(5,5,10,0.75)';
+      ctx.fillRect(px - metrics.width/2 - 6, labelY - fontSize + 1, metrics.width + 12, fontSize + 4);
+      ctx.fillStyle = `rgba(255,255,255,0.9)`;
+      ctx.textAlign = 'center';
+      ctx.fillText(s.name, px, labelY);
+    }
+  });
+
+  // ghost while placing
+  if (placing) {
+    const r = 3*scale;
+    const g = ctx.createRadialGradient(mouseX,mouseY,0,mouseX,mouseY,r*7);
+    g.addColorStop(0,'rgba(255,255,255,0.18)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(mouseX,mouseY,r*7,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    ctx.beginPath(); ctx.arc(mouseX,mouseY,r,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.fill();
+  }
+
+  if (!introComplete) bloomIndex += 0.7;
+  t++;
+  requestAnimationFrame(draw);
+}
+
+// ─── INTRO ────────────────────────────────────────────────────────────────
+function runIntro() {
+  const intro = document.getElementById('intro');
+  const introText = document.getElementById('intro-text');
+
+  const sorted = [...stars].filter(s=>s.year!==null).sort((a,b)=>a.year-b.year);
+  const unsorted = stars.filter(s=>s.year===null);
+  stars = [...sorted, ...unsorted];
+
+  introText.innerHTML = 'every project left a mark.<br>this is where they live.';
+  setTimeout(() => introText.classList.add('visible'), 300);
+  setTimeout(() => {
+    introText.classList.remove('visible');
+    setTimeout(() => {
+      intro.classList.add('fade-out');
+      setTimeout(() => {
+        intro.classList.add('gone');
+        introComplete = true;
+        bloomIndex = stars.length * 12 + 60;
+        document.getElementById('topbar').classList.add('visible');
+        if (hasPlaceholders) document.getElementById('placeholder-banner').classList.add('visible');
+        updateTimeline();
+        updateCount();
+      }, 1200);
+    }, 600);
+  }, 2800);
+}
+
+// ─── CLEAR PLACEHOLDERS ──────────────────────────────────────────────────
+// placeholder banner removed
+
+// ─── MOUSE ───────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  mouseX = e.clientX; mouseY = e.clientY;
+  const cur = document.getElementById('place-cursor');
+  cur.style.left = mouseX+'px'; cur.style.top = mouseY+'px';
+
+  // drag a star
+  if (draggingStar) {
+    const [wx, wy] = toWorld(e.clientX, e.clientY);
+    draggingStar.x = wx - dragOffsetX;
+    draggingStar.y = wy - dragOffsetY;
+    dragMoved = true;
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  if (!placing) {
+    hoveredStar = hitStar(mouseX, mouseY);
+    canvas.style.cursor = hoveredStar ? 'grab' : (panning ? 'grabbing' : 'crosshair');
+  }
+  if (panning && panStart) {
+    ox = panView.x + (e.clientX - panStart.x);
+    oy = panView.y + (e.clientY - panStart.y);
+  }
+});
+
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+
+  // placing a new star
+  if (placing) {
+    const [wx,wy] = toWorld(e.clientX, e.clientY);
+    pendingStar.x = wx; pendingStar.y = wy;
+    stars.push(pendingStar);
+    pendingStar = null; placing = false;
+    document.body.classList.remove('placing');
+    document.getElementById('placing-hint').classList.remove('visible');
+    updateTagStrip(); updateCount(); updateTimeline();
+    selectedStar = stars[stars.length-1];
+    renderDetail(selectedStar);
+    saveToStorage();
+    return;
+  }
+
+  // placing a new influence
+  if (placingInfluence) {
+    const [wx,wy] = toWorld(e.clientX, e.clientY);
+    pendingInfluence.x = wx; pendingInfluence.y = wy;
+    PRACTITIONERS.push(pendingInfluence);
+    pendingInfluence = null; placingInfluence = false;
+    document.body.classList.remove('placing');
+    document.getElementById('placing-hint-influence').style.opacity = '0';
+    selectedStar = PRACTITIONERS[PRACTITIONERS.length-1];
+    renderDetail(selectedStar);
+    return;
+  }
+
+  const hit = hitStar(e.clientX, e.clientY);
+  if (hit) {
+    draggingStar = hit;
+    dragMoved = false;
+    const [wx, wy] = toWorld(e.clientX, e.clientY);
+    dragOffsetX = wx - hit.x;
+    dragOffsetY = wy - hit.y;
+    return;
+  }
+
+  // pan
+  panning = true;
+  panStart = { x: e.clientX, y: e.clientY };
+  panView  = { x: ox, y: oy };
+});
+
+canvas.addEventListener('mouseup', () => {
+  // if dragging a star and barely moved → treat as click → open detail
+  if (draggingStar) {
+    if (!dragMoved) {
+      selectedStar = draggingStar;
+      renderDetail(draggingStar);
+    } else {
+      saveToStorage();
+    }
+    draggingStar = null;
+    dragMoved = false;
+    canvas.style.cursor = hoveredStar ? 'grab' : 'crosshair';
+    return;
+  }
+  panning = false;
+});
+canvas.addEventListener('mouseleave', () => { panning = false; draggingStar = null; });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const z = e.deltaY < 0 ? 1.09 : 0.92;
+  ox = e.clientX - (e.clientX - ox) * z;
+  oy = e.clientY - (e.clientY - oy) * z;
+  scale = Math.min(Math.max(scale * z, 0.12), 5);
+}, { passive: false });
+
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────
+const sidebar = document.getElementById('sidebar');
+document.getElementById('btn-add').addEventListener('click', () => sidebar.classList.toggle('open'));
+
+const toggle = document.getElementById('f-transformative-toggle');
+toggle.addEventListener('click', () => {
+  isTransformative = !isTransformative;
+  toggle.classList.toggle('on', isTransformative);
+});
+
+document.getElementById('btn-place').addEventListener('click', () => {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { document.getElementById('f-name').focus(); return; }
+  const yearVal = document.getElementById('f-year').value.trim();
+  const year = yearVal ? parseInt(yearVal) : null;
+  const desc = document.getElementById('f-desc').value.trim();
+  const tags = document.getElementById('f-tags').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
+
+  const sizeSeed = Math.random();
+  pendingStar = {
+    id: nextId++, name, desc, tags, year,
+    transformative: isTransformative,
+    x: 0, y: 0,
+    _sizeSeed: sizeSeed,
+    _phase: Math.random() * Math.PI * 2,
+    _phase2: Math.random() * Math.PI * 2,
+    _placeholder: false,
+    _blobPts: makeBlobPts(Math.random()),
+  };
+
+  placing = true;
+  document.body.classList.add('placing');
+  sidebar.classList.remove('open');
+  document.getElementById('placing-hint').classList.add('visible');
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-year').value = '';
+  document.getElementById('f-desc').value = '';
+  document.getElementById('f-tags').value = '';
+  isTransformative = false;
+  toggle.classList.remove('on');
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (placing) { placing=false; pendingStar=null; document.body.classList.remove('placing'); document.getElementById('placing-hint').classList.remove('visible'); }
+    if (placingInfluence) { placingInfluence=false; pendingInfluence=null; document.body.classList.remove('placing'); document.getElementById('placing-hint-influence').style.opacity='0'; }
+    if (selectedStar) { selectedStar=null; document.getElementById('detail').classList.remove('visible'); }
+    sidebar.classList.remove('open');
+    document.getElementById('influence-sidebar').style.transform = 'translateX(100%)';
+  }
+});
+
+// ─── CONSTELLATIONS ──────────────────────────────────────────────────────
+document.getElementById('btn-constellations').addEventListener('click', () => {
+  showConstellations = !showConstellations;
+  document.getElementById('btn-constellations').classList.toggle('active', showConstellations);
+  document.getElementById('btn-constellations').textContent = showConstellations ? 'Hide constellations' : 'Show constellations';
+  document.getElementById('tag-strip').classList.toggle('visible', showConstellations && allTagsList().length > 0);
+});
+
+let placingInfluence = false;
+let pendingInfluence = null;
+
+// ─── INFLUENCES TOGGLE ────────────────────────────────────────────────────
+document.getElementById('btn-influences').addEventListener('click', () => {
+  showInfluences = !showInfluences;
+  document.getElementById('btn-influences').classList.toggle('active', showInfluences);
+  document.getElementById('btn-influences').textContent = showInfluences ? 'Hide influences' : 'Show influences';
+  document.getElementById('btn-add-influence').style.display = showInfluences ? '' : 'none';
+  if (!showInfluences && selectedStar?.id?.toString().startsWith('p-')) {
+    selectedStar = null;
+    document.getElementById('detail').classList.remove('visible');
+  }
+});
+
+// ─── ADD INFLUENCE ────────────────────────────────────────────────────────
+document.getElementById('btn-add-influence').addEventListener('click', () => {
+  const inf = document.getElementById('influence-sidebar');
+  inf.style.transform = inf.style.transform === 'translateX(0px)' || inf.style.transform === 'translateX(0)'
+    ? 'translateX(100%)' : 'translateX(0)';
+  document.getElementById('sidebar').classList.remove('open');
+});
+
+document.getElementById('inf-place').addEventListener('click', () => {
+  const name = document.getElementById('inf-name').value.trim();
+  if (!name) { document.getElementById('inf-name').focus(); return; }
+  const desc = document.getElementById('inf-desc').value.trim();
+  const tags = document.getElementById('inf-tags').value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+  pendingInfluence = {
+    id: 'p-' + Date.now(),
+    name, desc, tags,
+    x: 0, y: 0,
+  };
+
+  placingInfluence = true;
+  document.body.classList.add('placing');
+  document.getElementById('influence-sidebar').style.transform = 'translateX(100%)';
+  document.getElementById('placing-hint-influence').style.opacity = '1';
+
+  document.getElementById('inf-name').value = '';
+  document.getElementById('inf-desc').value = '';
+  document.getElementById('inf-tags').value = '';
+});
+
+// ─── REMOVE INFLUENCE/STAR ───────────────────────────────────────────────
+document.getElementById('detail-remove-btn').addEventListener('click', () => {
+  if (!selectedStar) return;
+  const isPractitioner = selectedStar.id?.toString().startsWith('p-');
+  if (isPractitioner) {
+    PRACTITIONERS = PRACTITIONERS.filter(p => p.id !== selectedStar.id);
+  } else {
+    stars = stars.filter(s => s.id !== selectedStar.id);
+    updateTagStrip(); updateCount(); updateTimeline(); saveToStorage();
+  }
+  selectedStar = null;
+  document.getElementById('detail').classList.remove('visible');
+});
+
+// ─── DETAIL ──────────────────────────────────────────────────────────────
+function renderDetail(s) {
+  document.getElementById('detail-view').style.display = 'block';
+  document.getElementById('detail-edit').style.display = 'none';
+
+  const isPractitioner = !!s.id?.toString().startsWith('p-');
+
+  document.getElementById('detail-name').textContent = s.name;
+  document.getElementById('detail-year-badge').textContent = isPractitioner ? 'Influence' : (s.year ?? '—');
+  document.getElementById('detail-year-badge').style.color = isPractitioner ? 'rgba(255,245,238,0.55)' : 'rgba(255,255,255,0.38)';
+  document.getElementById('detail-year-badge').style.borderColor = 'none';
+  document.getElementById('detail-transformative-badge').classList.toggle('show', !!s.transformative && !isPractitioner);
+  document.getElementById('detail-desc').textContent = s.desc || '';
+
+  const connectedSection = document.getElementById('detail-connected-section');
+  const connectedToggle  = document.getElementById('detail-connected-toggle');
+  const connectedBody    = document.getElementById('detail-connected-body');
+  const connectedLabel   = document.getElementById('detail-connected-label');
+
+  if (isPractitioner) {
+    // Keywords go in tags row (subtle, so the user knows what connects)
+    document.getElementById('detail-tags').innerHTML = s.tags.length
+      ? s.tags.map(tg => `<span class="dtag">${tg}</span>`).join('')
+      : '';
+
+    // Connected projects hidden behind collapsible
+    const connected = stars.filter(st => st.tags.some(t => s.tags.includes(t)));
+    connectedLabel.textContent = connected.length
+      ? `Connected projects (${connected.length})`
+      : 'Connected projects';
+    connectedBody.innerHTML = connected.length
+      ? connected.map(st => `<span class="dtag">${st.name}</span>`).join('')
+      : '<span style="font-size:11px;font-weight:300;color:rgba(255,255,255,0.3)">No shared keywords yet</span>';
+
+    // Reset to collapsed state every time the panel opens
+    connectedToggle.classList.remove('expanded');
+    connectedToggle.setAttribute('aria-expanded', 'false');
+    connectedBody.classList.remove('open');
+    connectedSection.style.display = '';
+  } else {
+    document.getElementById('detail-tags').innerHTML = s.tags.length
+      ? s.tags.map(tg => `<span class="dtag">${tg}</span>`).join('')
+      : '';
+    connectedSection.style.display = 'none';
+  }
+
+  // always show edit button, show remove for all
+  document.getElementById('detail-edit-btn').style.display = '';
+  document.getElementById('detail-remove-btn').style.display = '';
+  document.getElementById('detail').classList.add('visible');
+}
+
+function openEditMode(s) {
+  document.getElementById('detail-view').style.display = 'none';
+  document.getElementById('detail-edit').style.display = 'block';
+
+  const isPractitioner = !!s.id?.toString().startsWith('p-');
+
+  document.getElementById('e-name').value  = s.name;
+  document.getElementById('e-desc').value  = s.desc ?? '';
+
+  if (isPractitioner) {
+    // adapt labels for practitioner context
+    document.getElementById('e-label-name').textContent  = 'Name';
+    document.getElementById('e-label-desc').textContent  = 'About';
+    document.getElementById('e-label-tags').textContent  = 'Keywords (for auto-connections)';
+    document.getElementById('e-hint-tags').textContent   = 'Shared keywords connect this influence to your project stars.';
+    document.getElementById('e-field-year').style.display = 'none';
+    document.getElementById('e-field-transformative').style.display = 'none';
+    document.getElementById('e-tags').value = s.tags.join(', ');
+  } else {
+    document.getElementById('e-label-name').textContent  = 'Experience';
+    document.getElementById('e-label-desc').textContent  = 'Reflection';
+    document.getElementById('e-label-tags').textContent  = 'Keywords';
+    document.getElementById('e-hint-tags').textContent   = 'Comma-separated.';
+    document.getElementById('e-field-year').style.display = '';
+    document.getElementById('e-field-transformative').style.display = '';
+    document.getElementById('e-year').value  = s.year ?? '';
+    document.getElementById('e-tags').value  = s.tags.join(', ');
+    const etog = document.getElementById('e-transformative-toggle');
+    etog.classList.toggle('on', !!s.transformative);
+  }
+}
+
+document.getElementById('detail-edit-btn').addEventListener('click', () => {
+  if (selectedStar) openEditMode(selectedStar);
+});
+
+document.getElementById('e-save').addEventListener('click', () => {
+  if (!selectedStar) return;
+  const name = document.getElementById('e-name').value.trim();
+  if (!name) { document.getElementById('e-name').focus(); return; }
+
+  const isPractitioner = !!selectedStar.id?.toString().startsWith('p-');
+
+  selectedStar.name = name;
+  selectedStar.desc = document.getElementById('e-desc').value.trim();
+  selectedStar.tags = document.getElementById('e-tags').value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+  if (!isPractitioner) {
+    selectedStar.year = document.getElementById('e-year').value ? parseInt(document.getElementById('e-year').value) : null;
+    selectedStar.transformative = document.getElementById('e-transformative-toggle').classList.contains('on');
+    updateTagStrip();
+    updateTimeline();
+    saveToStorage();
+  }
+
+  renderDetail(selectedStar);
+});
+
+document.getElementById('e-cancel').addEventListener('click', () => {
+  if (selectedStar) renderDetail(selectedStar);
+});
+
+document.getElementById('e-transformative-toggle').addEventListener('click', () => {
+  document.getElementById('e-transformative-toggle').classList.toggle('on');
+});
+
+document.getElementById('detail-close').addEventListener('click', () => {
+  selectedStar = null;
+  document.getElementById('detail').classList.remove('visible');
+});
+
+document.getElementById('detail-connected-toggle').addEventListener('click', () => {
+  const toggle = document.getElementById('detail-connected-toggle');
+  const body   = document.getElementById('detail-connected-body');
+  const expanded = toggle.classList.toggle('expanded');
+  toggle.setAttribute('aria-expanded', expanded);
+  body.classList.toggle('open', expanded);
+});
+
+// ─── TIMELINE ────────────────────────────────────────────────────────────
+let scrubbing = false;
+const track = document.getElementById('scrubber-track');
+
+function updateTimeline() {
+  const yr = yearRange();
+  if (!yr || yr.min === yr.max) { document.getElementById('timeline').classList.remove('visible'); return; }
+  document.getElementById('timeline').classList.add('visible');
+  document.getElementById('year-label-left').textContent = yr.min;
+  document.getElementById('year-label-right').textContent = yr.max;
+  if (scrubYear === null) setScrub(yr.max, yr);
+}
+
+function setScrub(year, yr) {
+  if (!yr) yr = yearRange();
+  if (!yr) return;
+  scrubYear = Math.round(year);
+  const pct = yr.min===yr.max ? 1 : (year-yr.min)/(yr.max-yr.min);
+  document.getElementById('scrubber-fill').style.width = `${pct*100}%`;
+  document.getElementById('scrubber-thumb').style.left  = `${pct*100}%`;
+  const atEnd = scrubYear >= yr.max;
+  document.getElementById('timeline-year-display').textContent = atEnd ? 'all' : scrubYear;
+  if (atEnd) scrubYear = null;
+}
+
+function scrubFromEvent(e) {
+  const yr = yearRange(); if (!yr) return;
+  const rect = track.getBoundingClientRect();
+  const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  setScrub(yr.min + pct*(yr.max-yr.min), yr);
+}
+
+track.addEventListener('mousedown', e => { scrubbing=true; scrubFromEvent(e); });
+window.addEventListener('mousemove', e => { if (scrubbing) scrubFromEvent(e); });
+window.addEventListener('mouseup', () => { scrubbing=false; });
+
+// ─── TAG STRIP ───────────────────────────────────────────────────────────
+function updateTagStrip() {
+  const strip = document.getElementById('tag-strip');
+  const tags = allTagsList();
+  strip.innerHTML = tags.map(t=>`<button class="tag-pill${activeTags.has(t)?' on':''}" data-tag="${t}">${t}</button>`).join('');
+  if (showConstellations && tags.length) strip.classList.add('visible');
+  strip.querySelectorAll('.tag-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tg = btn.dataset.tag;
+      activeTags.has(tg) ? activeTags.delete(tg) : activeTags.add(tg);
+      updateTagStrip();
+    });
+  });
+}
+
+// ─── COUNT ───────────────────────────────────────────────────────────────
+function updateCount() {
+  const n = stars.length;
+  document.getElementById('star-count-label').textContent =
+    n === 0 ? 'no experiences charted yet'
+    : n === 1 ? '1 experience charted'
+    : `${n} experiences charted`;
+}
+
+// ─── LOCAL STORAGE + EXPORT ──────────────────────────────────────────────
+const STORAGE_KEY = 'design-galaxy-v1';
+
+function starsToData() {
+  return stars.map(s => ({
+    name: s.name, year: s.year,
+    x: s.x, y: s.y,
+    desc: s.desc, tags: s.tags,
+    transformative: s.transformative,
+  }));
+}
+
+function dataToStars(data) {
+  return data.map(s => ({
+    id: nextId++,
+    name: s.name || 'Untitled',
+    year: s.year ?? null,
+    x: s.x ?? 0, y: s.y ?? 0,
+    desc: s.desc ?? '',
+    tags: s.tags ?? [],
+    transformative: !!s.transformative,
+    _sizeSeed: Math.random(),
+    _phase: Math.random() * Math.PI * 2,
+    _phase2: Math.random() * Math.PI * 2,
+    _placeholder: false,
+    _blobPts: makeBlobPts(Math.random()),
+  }));
+}
+
+function saveToStorage() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(starsToData())); } catch(e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data) || !data.length) return false;
+    stars = dataToStars(data);
+    return true;
+  } catch(e) { return false; }
+}
+
+// Export as JSON backup
+document.getElementById('btn-export').addEventListener('click', () => {
+  const json = JSON.stringify({ version:1, stars: starsToData() }, null, 2);
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([json], { type:'application/json' })),
+    download: 'design-galaxy.json',
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// Import from JSON backup
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const arr = data.stars || data; // handle both {version,stars} and bare array
+      if (!Array.isArray(arr)) throw new Error();
+      stars = dataToStars(arr);
+      selectedStar = null;
+      document.getElementById('detail').classList.remove('visible');
+      fitGalaxy(); updateTagStrip(); updateTimeline(); updateCount();
+      saveToStorage();
+    } catch(e) {
+      alert('Could not read file — make sure it\'s a design-galaxy.json export.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// ─── EMBEDDED DATA ───────────────────────────────────────────────────────
+const EMBEDDED_STARS = {"version":1,"stars":[{"name":"Reality TV show about food waste","year":2023,"x":-356.1645043628482,"y":-87.67274131261465,"desc":"First Commerce course I had to design for, we used the same design thinking framework but had to consider more regarding stakeholders, impact, feasibility, and pitching. It was a nice exploration into the design process that had a non-visual outcome, or an outcome outside what is typically considered design.","tags":["strategy","sustainability"],"transformative":false},{"name":"Space divider for public areas","year":2023,"x":-550.0338656466367,"y":23.387966839254734,"desc":"First design project ever in university. I'm ok with the outcome but that has more to do with the prototype or the physical execution of it rather than the concept behind it. I found out I did not enjoy, or at least get rather lost working in hypothetical contexts with no clear parameters.","tags":["strategy","sustainability"],"transformative":false},{"name":"History of a Chinese teapot","year":2023,"x":-166.50470034144172,"y":25.516481529913822,"desc":"I actually don't mind research but I think it would have been more beneficial if I had an actual project to maybe relate it back to. Though I think it has helped me realise that I enjoy looking into history and culture to inform my design practice.","tags":["culture"],"transformative":false},{"name":"Redesigning a commerce program","year":2024,"x":501.1231326297774,"y":-307.0857403390122,"desc":"Ongoing process. Involves piloting and testing improvements to student support and structure of a course core to the BCom. Honestly has been pretty fulfilling to see the iterations come into fruition. I think especially since the changes have real impact, rather than being an hypothetical concept, and we're able to see what actually works and what doesn't.","tags":["strategy","real-world"],"transformative":true},{"name":"An experience to save the Gilbert's potoroo","year":2024,"x":-337.7778033525528,"y":201.14020262759422,"desc":"I was fine with the look of the design outcome, and could technically explain how it worked, but there was no true way to test if it was actually feasible or was able to make a genuine positive impact like the project aim had outlined. Problem-wise, I think enough research was done, but solution-wise, it wasn't able to be tested or actually proved so, I don't know whether I would call this a successful design.","tags":["interaction","graphics","sustainability"],"transformative":false},{"name":"Turning kudzu into teabags","year":2024,"x":-95.78114115297964,"y":-240.32908640719864,"desc":"I did enjoy the concept but again execution-wise, I'm not sure if it would have been a commercially-feasible idea. I would have liked to dive into it more graphically, but at that point I had not taken any courses for either of my disciplines so that was not something I necessarily focused on with this project. It also got me thinking more about the production process as well as the product lifecycle, which I liked since it gave me a more comprehensive idea on it's actual implementation, and made it less just an abstract idea.","tags":["strategy","sustainability"],"transformative":false},{"name":"Collaborative travel planning app","year":2024,"x":625.9636998405115,"y":140.05488617028257,"desc":"I didn't have any major issues in the duration of this project, although I think I would have liked to have more time in each stage, whether that be testing, iterating, or refining. If I had more time to dive into the problem as well, I believe that the final output would have been better resolved, the concept is there but it wasn't very nuanced or strong.","tags":["interaction","branding"],"transformative":false},{"name":"A game to teach daily English","year":2024,"x":693.4028348897302,"y":3.0169942474317057,"desc":"I felt that I spent more of this course tackling the technology and tools we were required to use than actually thinking about what I was designing so I would say the execution is not ideal. It was nice to have so much focus on actually testing and iterating though, and to see step by step where to improve, why, and how. This eliminated a lot of indecision that usually occurs during my design process, since I had testing results to fall back on and justify changes.","tags":["interaction","culture"],"transformative":false},{"name":"Magazine design","year":2024,"x":369.8137864286584,"y":194.55127925652698,"desc":"It helped me realise how important just continuously experimenting and iterating was in reaching a design I was satisfied with, but I think I would preferred if I had a stronger message to communicate, or a problem to solve, so as to guide my decisions.","tags":["graphics"],"transformative":false},{"name":"Branding a design exhibition","year":2024,"x":260.32057830992096,"y":-141.05809915034536,"desc":"It was a good reflection on what I thought design was, and it was interesting to explore how I could communicate that visually. I liked actually having a message or problem to guide my thinking and decisions, as well as diving into the thinking behind seemingly simple decisions like colour and type.","tags":["graphics","branding"],"transformative":true},{"name":"Dandelion packaging","year":2024,"x":413.18507439222714,"y":-142.39978155157578,"desc":"One of the more challenging projects, definitely, and self-inflicted. I think I just liked the inherent juxtaposition and symbolism behind the concept so I stuck to it, but it was fun to just explore the forms given the constraints on materials, and figure out how to defamiliarise myself with and then convey a feeling or idea.","tags":["graphics","branding"],"transformative":false},{"name":"Hail risk reduction webpage for Suncorp","year":2025,"x":762.5483151025488,"y":-103.27186386678812,"desc":"An extremely challenging project from beginning to end, but I think it was less a problem with the design process, and more with the fact that I don't think we ever figured out how to collaborate effectively as a team. It just drew my attention to how important iteratively ideating and testing is to come up with an innovative design. Despite that, I believe it was a good experience to work with an actual client and an actual problem they were having, as well as learning how to effectively pitch an idea that I was not feeling 100% about.","tags":["strategy","sustainability","real-world"],"transformative":false},{"name":"Cultural literacy app for international students","year":2025,"x":3.257407439627348,"y":-42.202032462103595,"desc":"A project for an innovation course, that I undertook on exchange in Beijing, China. Although on the global scale the problems were the same, once we zoomed in to look at the personal experiences of those around us, we were able to isolate these China-specific issues. Not only did this teach me how to work within different contexts, engaging in cross-cultural collaboration, but also how to design for an prominent everyday issue that may not be visible to those that are living outside of it.","tags":["strategy","culture"],"transformative":false},{"name":"Business design in China","year":2025,"x":-54.90394103089144,"y":-122.44437550380178,"desc":"Not necessarily within scope of my design experience but I got to see and learn about first-hand how innovative business models in China have become established, and the environmental and social reasons behind their success. Businesses like Alipay, Wechat etc. rely heavily on a complex system of interfaces to keep their operations afloat and it was really intriguing to see how needs, and thus their designs, vary across countries.","tags":["strategy","culture","real-world"],"transformative":true},{"name":"Wayfinding for Eastwood","year":2025,"x":76.75960318912996,"y":-204.98523548048738,"desc":"It took me a while to settle on my final concept, I think I wandered for a bit. What I thought I was going to pursue in the beginning was still part of the process but I think I deviated from it quite a bit. This just shows that I have to give enough time to exploration, but I also just need to dive in and try things, to know what works and what doesn't, rather than just thinking about it and imagining the outcome.","tags":["graphics","culture","branding"],"transformative":false},{"name":"The branding of the Olympics","year":2025,"x":168.92277748575935,"y":302.5380560246719,"desc":"I've found Olympic design pretty interesting for a while now, so it was a good excuse to just dive into it. It helped me realise that I liked analysing how messages can be deliberately crafted through visual design, and its reception, including the impact that cultural nuances, historical events, and social perception may have on whether the desired message is communicated successfully.","tags":["graphics","culture","branding"],"transformative":false}]};
+
+// ─── INIT ────────────────────────────────────────────────────────────────
+const hadSaved = loadFromStorage();
+if (!hadSaved) {
+  // Load embedded data as the default instead of generic placeholders
+  stars = dataToStars(EMBEDDED_STARS.stars);
+  hasPlaceholders = false;
+}
+// Always re-fit after stars are populated — resize() may have run before
+// stars existed, so we must call fitGalaxy() here when W/H are known.
+fitGalaxy(); updateCount(); updateTagStrip(); updateTimeline();
+draw();
+setTimeout(runIntro, 200);
+</script>
+</body>
+</html>
